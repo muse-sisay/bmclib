@@ -1,0 +1,17 @@
+{
+    "@odata.type": "#Processor.v1_18_0.Processor",
+    "@odata.id": "/redfish/v1/Systems/1/Processors/Video.Slot.1-1",
+    "Id": "Video.Slot.1-1",
+    "Name": "Processor",
+    "Description": "GPU in PCIe slot 1",
+    "ProcessorType": "GPU",
+    "Socket": "PCIe Slot 1",
+    "Manufacturer": "NVIDIA Corporation",
+    "Model": "NVIDIA H100 PCIe",
+    "SerialNumber": "1650123456789",
+    "FirmwareVersion": "96.00.5E.00.01",
+    "Status": {
+        "State": "Enabled",
+        "Health": "OK"
+    }
+}

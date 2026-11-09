@@ -619,7 +619,7 @@ func (c *Client) collectStorageControllers(sys *schemas.ComputerSystem, device *
 	return nil
 }
 
-// collectCPUs populates the device with CPU component attributes
+// collectCPUs populates the device with CPU and GPU component attributes
 func (c *Client) collectCPUs(sys *schemas.ComputerSystem, device *common.Device, _ []*schemas.SoftwareInventory) (err error) {
 	procs, err := sys.Processors()
 	if err != nil {
@@ -627,6 +627,25 @@ func (c *Client) collectCPUs(sys *schemas.ComputerSystem, device *common.Device,
 	}
 
 	for _, proc := range procs {
+		if proc.ProcessorType == "GPU" {
+			device.GPUs = append(device.GPUs, &common.GPU{
+				Common: common.Common{
+					Description: proc.Description,
+					Vendor:      common.FormatVendorName(proc.Manufacturer),
+					Model:       proc.Model,
+					Serial:      proc.SerialNumber,
+					Status: &common.Status{
+						Health: string(proc.Status.Health),
+						State:  string(proc.Status.State),
+					},
+					Firmware: &common.Firmware{
+						Installed: proc.FirmwareVersion,
+					},
+				},
+			})
+			continue
+		}
+
 		if proc.ProcessorType != "CPU" {
 			// TODO: handle this case
 			continue

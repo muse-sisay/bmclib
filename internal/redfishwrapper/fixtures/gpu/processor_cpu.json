@@ -1,0 +1,17 @@
+{
+    "@odata.type": "#Processor.v1_18_0.Processor",
+    "@odata.id": "/redfish/v1/Systems/1/Processors/CPU.Socket.1",
+    "Id": "CPU.Socket.1",
+    "Name": "Processor",
+    "ProcessorType": "CPU",
+    "ProcessorArchitecture": "x86",
+    "Socket": "CPU.Socket.1",
+    "Manufacturer": "Intel",
+    "Model": "Intel(R) Xeon(R) Platinum 8480+",
+    "TotalCores": 56,
+    "TotalThreads": 112,
+    "Status": {
+        "State": "Enabled",
+        "Health": "OK"
+    }
+}

@@ -467,3 +467,46 @@ func TestInventoryCollectBMCNIC(t *testing.T) {
 		}
 	}
 }
+
+// TestInventoryCollectGPUs proves that a processor the BMC reports with
+// ProcessorType GPU lands in the inventory's GPUs, and not among its CPUs.
+func TestInventoryCollectGPUs(t *testing.T) {
+	mux := http.NewServeMux()
+	for path, fixture := range map[string]string{
+		"/redfish/v1/":                                    "serviceroot.json",
+		"/redfish/v1/Systems":                             "systems.json",
+		"/redfish/v1/Systems/1":                           "systems_1.json",
+		"/redfish/v1/Systems/1/Processors":                "gpu/processors.json",
+		"/redfish/v1/Systems/1/Processors/CPU.Socket.1":   "gpu/processor_cpu.json",
+		"/redfish/v1/Systems/1/Processors/Video.Slot.1-1": "gpu/processor_gpu.json",
+	} {
+		mux.HandleFunc(path, endpointFunc(t, fixture))
+	}
+
+	server := httptest.NewTLSServer(mux)
+	defer server.Close()
+
+	u, err := url.Parse(server.URL)
+	require.NoError(t, err)
+
+	client := NewClient(u.Hostname(), u.Port(), "", "", WithBasicAuthEnabled(true))
+	require.NoError(t, client.Open(context.Background()))
+	defer client.Close(context.Background())
+
+	device, err := client.Inventory(context.Background(), false)
+	require.NoError(t, err)
+	require.NotNil(t, device)
+
+	require.Len(t, device.CPUs, 1, "the GPU must not be counted as a CPU")
+	require.Len(t, device.GPUs, 1)
+	gpu := device.GPUs[0]
+	assert.Equal(t, "NVIDIA Corporation", gpu.Vendor)
+	assert.Equal(t, "NVIDIA H100 PCIe", gpu.Model)
+	assert.Equal(t, "1650123456789", gpu.Serial)
+	assert.Equal(t, "GPU in PCIe slot 1", gpu.Description)
+	require.NotNil(t, gpu.Firmware)
+	assert.Equal(t, "96.00.5E.00.01", gpu.Firmware.Installed)
+	require.NotNil(t, gpu.Status)
+	assert.Equal(t, "OK", gpu.Status.Health)
+	assert.Equal(t, "Enabled", gpu.Status.State)
+}
