@@ -229,7 +229,7 @@ func (c *Client) systemAttributes(device *common.Device, failOnError bool, softw
 
 	// slice of collector methods
 	funcs := collectorFuncs{
-		c.collectCPUs,
+		c.collectProcessors,
 		c.collectDIMMs,
 		c.collectDrives,
 		c.collectBIOS,

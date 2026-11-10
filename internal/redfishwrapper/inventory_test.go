@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bmc-toolbox/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -470,7 +471,12 @@ func TestInventoryCollectBMCNIC(t *testing.T) {
 
 // TestInventoryCollectGPUs proves that a processor the BMC reports with
 // ProcessorType GPU lands in the inventory's GPUs, and not among its CPUs.
-func TestInventoryCollectGPUs(t *testing.T) {
+// gpuFixtureInventory runs Inventory against a BMC serving the gpu fixtures:
+// one CPU and one GPU under Systems/1/Processors. The GPU member is served by
+// gpuHandler when it is non-nil.
+func gpuFixtureInventory(t *testing.T, gpuHandler http.HandlerFunc) *common.Device {
+	t.Helper()
+
 	mux := http.NewServeMux()
 	for path, fixture := range map[string]string{
 		"/redfish/v1/":                                    "serviceroot.json",
@@ -480,26 +486,46 @@ func TestInventoryCollectGPUs(t *testing.T) {
 		"/redfish/v1/Systems/1/Processors/CPU.Socket.1":   "gpu/processor_cpu.json",
 		"/redfish/v1/Systems/1/Processors/Video.Slot.1-1": "gpu/processor_gpu.json",
 	} {
-		mux.HandleFunc(path, endpointFunc(t, fixture))
+		handler := endpointFunc(t, fixture)
+		if gpuHandler != nil && fixture == "gpu/processor_gpu.json" {
+			handler = gpuHandler
+		}
+		mux.HandleFunc(path, handler)
 	}
 
 	server := httptest.NewTLSServer(mux)
-	defer server.Close()
+	t.Cleanup(server.Close)
 
 	u, err := url.Parse(server.URL)
 	require.NoError(t, err)
 
 	client := NewClient(u.Hostname(), u.Port(), "", "", WithBasicAuthEnabled(true))
 	require.NoError(t, client.Open(context.Background()))
-	defer client.Close(context.Background())
+	t.Cleanup(func() { client.Close(context.Background()) })
 
 	device, err := client.Inventory(context.Background(), false)
 	require.NoError(t, err)
 	require.NotNil(t, device)
 
+	return device
+}
+
+func TestInventoryCollectGPUs(t *testing.T) {
+	device := gpuFixtureInventory(t, nil)
+
 	require.Len(t, device.CPUs, 1, "the GPU must not be counted as a CPU")
+	cpu := device.CPUs[0]
+	assert.Equal(t, "CPU.Socket.1", cpu.ID)
+	assert.Equal(t, "intel", cpu.Vendor)
+	assert.Equal(t, "Intel(R) Xeon(R) Platinum 8480+", cpu.Model)
+	assert.Equal(t, "CPU.Socket.1", cpu.Slot)
+	assert.Equal(t, "x86", cpu.Architecture)
+	assert.Equal(t, 56, cpu.Cores)
+	assert.Equal(t, 112, cpu.Threads)
+
 	require.Len(t, device.GPUs, 1)
 	gpu := device.GPUs[0]
+	assert.Equal(t, "Video.Slot.1-1", gpu.LogicalName)
 	assert.Equal(t, "NVIDIA Corporation", gpu.Vendor)
 	assert.Equal(t, "NVIDIA H100 PCIe", gpu.Model)
 	assert.Equal(t, "1650123456789", gpu.Serial)
@@ -509,4 +535,16 @@ func TestInventoryCollectGPUs(t *testing.T) {
 	require.NotNil(t, gpu.Status)
 	assert.Equal(t, "OK", gpu.Status.Health)
 	assert.Equal(t, "Enabled", gpu.Status.State)
+}
+
+// TestInventoryCollectProcessorsKeepsLoadedMembers proves that one processor
+// the BMC fails to return does not drop the processors that did load.
+func TestInventoryCollectProcessorsKeepsLoadedMembers(t *testing.T) {
+	device := gpuFixtureInventory(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+
+	require.Len(t, device.CPUs, 1)
+	assert.Equal(t, "CPU.Socket.1", device.CPUs[0].ID)
+	assert.Empty(t, device.GPUs)
 }
